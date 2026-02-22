@@ -568,6 +568,114 @@
   }
 
   /* ══════════════════════════════
+     MUSIC FAB
+  ══════════════════════════════ */
+  #music-btn {
+    position: fixed;
+    bottom: 1.4rem;
+    right: 1.1rem;
+    z-index: 10000;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 1px solid var(--toggle-border);
+    background: var(--toggle-bg);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 4px 20px var(--toggle-shadow);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: border-color 0.4s, box-shadow 0.4s, transform 0.2s;
+    overflow: visible;
+  }
+  #music-btn:active { transform: scale(0.88); }
+
+  #music-btn::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1.5px solid var(--rose-light);
+    opacity: 0;
+    transform: scale(1);
+    pointer-events: none;
+  }
+  #music-btn.playing::before {
+    opacity: 0.55;
+    animation: musicPulse 1.8s ease-in-out infinite;
+  }
+  @keyframes musicPulse {
+    0%,100% { transform: scale(1);    opacity: 0.5; }
+    50%      { transform: scale(1.25); opacity: 0.12; }
+  }
+
+  .music-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2.5px;
+    height: 20px;
+    transition: opacity 0.3s;
+  }
+  .bar {
+    width: 3px;
+    border-radius: 2px;
+    background: var(--rose);
+    transform-origin: bottom;
+    transition: background 0.4s;
+  }
+  .bar1 { height: 8px;  animation: barDance 1s  0.00s ease-in-out infinite; }
+  .bar2 { height: 14px; animation: barDance 1s  0.15s ease-in-out infinite; }
+  .bar3 { height: 20px; animation: barDance 1s  0.30s ease-in-out infinite; }
+  .bar4 { height: 14px; animation: barDance 1s  0.15s ease-in-out infinite; }
+  .bar5 { height: 8px;  animation: barDance 1s  0.00s ease-in-out infinite; }
+
+  @keyframes barDance {
+    0%,100% { transform: scaleY(0.3); }
+    50%      { transform: scaleY(1); }
+  }
+
+  #music-btn.muted .bar            { animation-play-state: paused; transform: scaleY(0.3); }
+  #music-btn.muted .music-bars     { opacity: 0.35; }
+  #music-btn.muted .mute-slash     { opacity: 1; }
+
+  .mute-slash {
+    position: absolute;
+    width: 2px;
+    height: 30px;
+    background: var(--rose);
+    border-radius: 2px;
+    transform: rotate(40deg);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+
+  #music-toast {
+    position: fixed;
+    bottom: 5.2rem;
+    right: 1rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(12px);
+    color: var(--text-soft);
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    padding: 0.45rem 0.9rem;
+    border-radius: 20px;
+    box-shadow: 0 4px 16px var(--card-shadow);
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.4s ease, transform 0.4s ease, background 0.5s, color 0.5s, border-color 0.5s;
+    pointer-events: none;
+    z-index: 9999;
+  }
+  #music-toast.show { opacity: 1; transform: translateY(0); }
+
+  /* ══════════════════════════════
      SPARKLES & RIPPLES
   ══════════════════════════════ */
   .sparkle {
@@ -606,6 +714,21 @@
 <button id="theme-toggle" aria-label="Toggle theme">
   <span class="toggle-icon icon-sun">☀️</span>
   <span class="toggle-icon icon-moon">🌙</span>
+</button>
+
+<!-- Music toast hint -->
+<div id="music-toast">🎵 Scroll to play music</div>
+
+<!-- Music FAB -->
+<button id="music-btn" class="muted" aria-label="Toggle music">
+  <div class="music-bars">
+    <div class="bar bar1"></div>
+    <div class="bar bar2"></div>
+    <div class="bar bar3"></div>
+    <div class="bar bar4"></div>
+    <div class="bar bar5"></div>
+  </div>
+  <div class="mute-slash"></div>
 </button>
 
 <canvas id="petal-canvas"></canvas>
@@ -829,6 +952,121 @@ function tick(){
 tick();
 
 /* ══════════════════════════
+   BIRTHDAY MUSIC ENGINE
+══════════════════════════ */
+const AC = window.AudioContext || window.webkitAudioContext;
+let audioCtx   = null;
+let masterGain = null;
+let isMuted    = true;
+let musicStarted = false;
+let nextLoopTimeout = null;
+
+// Happy Birthday melody: [frequency_hz, duration_in_beats]
+const BEAT = 0.30; // seconds per beat
+const GAP  = 0.8;  // silent beats between loops
+const melody = [
+  [392,0.75],[392,0.25],[440,1],[392,1],[523,1],[494,2.5],
+  [392,0.75],[392,0.25],[440,1],[392,1],[587,1],[523,2.5],
+  [392,0.75],[392,0.25],[784,1],[659,1],[523,1],[494,1],[440,2.5],
+  [698,0.75],[698,0.25],[659,1],[523,1],[587,1],[523,3],
+];
+const MELODY_DURATION = melody.reduce((s,[,d])=>s+d,0)*BEAT + GAP*BEAT;
+
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx   = new AC();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0;   // start silent; fade in
+  masterGain.connect(audioCtx.destination);
+}
+
+function playNote(freq, startTime, beats){
+  const dur = beats * BEAT;
+
+  // Layered sine waves for a soft bell/music-box timbre
+  [[1,0.55],[2,0.22],[3,0.10],[4,0.05]].forEach(([mult, amp])=>{
+    const osc  = audioCtx.createOscillator();
+    const gn   = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq * mult;
+    osc.connect(gn);
+    gn.connect(masterGain);
+    // Envelope: quick attack, exponential decay
+    gn.gain.setValueAtTime(0, startTime);
+    gn.gain.linearRampToValueAtTime(amp, startTime + 0.018);
+    gn.gain.exponentialRampToValueAtTime(0.001, startTime + Math.min(dur * 0.9, 1.4));
+    osc.start(startTime);
+    osc.stop(startTime + Math.min(dur, 1.5));
+  });
+}
+
+function scheduleMelody(){
+  if(!audioCtx || isMuted) return;
+  let t = audioCtx.currentTime + 0.05;
+  melody.forEach(([freq, beats])=>{ playNote(freq, t, beats); t += beats*BEAT; });
+  nextLoopTimeout = setTimeout(scheduleMelody, MELODY_DURATION * 1000);
+}
+
+function fadeGain(to, ms){
+  if(!masterGain) return;
+  masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+  masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
+  masterGain.gain.linearRampToValueAtTime(to, audioCtx.currentTime + ms/1000);
+}
+
+function startMusic(){
+  if(musicStarted) return;
+  musicStarted = true;
+  initAudio();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  isMuted = false;
+  musicBtn.classList.remove('muted');
+  musicBtn.classList.add('playing');
+  masterGain.gain.value = 0;
+  fadeGain(0.42, 1200);
+  scheduleMelody();
+}
+
+const musicBtn = document.getElementById('music-btn');
+const toast    = document.getElementById('music-toast');
+
+// Show toast hint after 1.5s
+setTimeout(()=>{
+  toast.classList.add('show');
+  setTimeout(()=> toast.classList.remove('show'), 3200);
+}, 1500);
+
+// Start on first scroll
+let scrollUnlocked = false;
+window.addEventListener('scroll', ()=>{
+  if(scrollUnlocked) return;
+  scrollUnlocked = true;
+  startMusic();
+}, { passive: true, once: true });
+
+// FAB toggle
+musicBtn.addEventListener('click', ()=>{
+  if(!musicStarted){
+    // Manual start before scroll
+    startMusic();
+    return;
+  }
+  isMuted = !isMuted;
+  if(isMuted){
+    fadeGain(0, 600);
+    musicBtn.classList.add('muted');
+    musicBtn.classList.remove('playing');
+    clearTimeout(nextLoopTimeout);
+    nextLoopTimeout = null;
+  } else {
+    musicBtn.classList.remove('muted');
+    musicBtn.classList.add('playing');
+    fadeGain(0.42, 600);
+    scheduleMelody();
+  }
+});
+
+/* ══════════════════════════
    SCROLL REVEAL
 ══════════════════════════ */
 const observer = new IntersectionObserver(entries=>{
@@ -867,11 +1105,11 @@ function onInteract(x,y,fromBtn){
 document.addEventListener('touchstart',e=>{
   for(const t of e.touches){
     const el=document.elementFromPoint(t.clientX,t.clientY);
-    onInteract(t.clientX,t.clientY, el && el.closest('#theme-toggle'));
+    onInteract(t.clientX,t.clientY, el && (el.closest('#theme-toggle') || el.closest('#music-btn')));
   }
 },{passive:true});
 document.addEventListener('click',e=>{
-  onInteract(e.clientX,e.clientY, e.target.closest('#theme-toggle'));
+  onInteract(e.clientX,e.clientY, e.target.closest('#theme-toggle') || e.target.closest('#music-btn'));
 });
 </script>
 </body>
