@@ -102,6 +102,57 @@
   }
 
   /* ══════════════════════════════
+     SCROLL PROGRESS BAR
+  ══════════════════════════════ */
+  #progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    width: 0%;
+    z-index: 99999;
+    pointer-events: none;
+    background: linear-gradient(90deg, #c0446a, #d4a450, #e07898, #c0446a);
+    background-size: 300%;
+    animation: progressShimmer 3s linear infinite;
+    box-shadow: 0 0 8px rgba(192,68,106,0.6), 0 0 2px rgba(192,68,106,0.8);
+    border-radius: 0 2px 2px 0;
+  }
+  @keyframes progressShimmer {
+    0%   { background-position: 0% 0%; }
+    100% { background-position: 300% 0%; }
+  }
+
+  /* ══════════════════════════════
+     PAGE-LOAD PARTICLE BURST
+  ══════════════════════════════ */
+  .burst-particle {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9990;
+    font-style: normal;
+    will-change: transform, opacity;
+  }
+
+  /* ══════════════════════════════
+     TYPEWRITER CURSOR
+  ══════════════════════════════ */
+  .tw-cursor {
+    display: inline-block;
+    width: 2px;
+    height: 0.85em;
+    background: var(--rose);
+    margin-left: 3px;
+    vertical-align: middle;
+    animation: cursorBlink 0.75s ease-in-out infinite;
+    border-radius: 1px;
+    transition: background 0.4s;
+  }
+  @keyframes cursorBlink {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0; }
+  }
+
+  /* ══════════════════════════════
      THEME TOGGLE BUTTON
   ══════════════════════════════ */
   #theme-toggle {
@@ -458,12 +509,13 @@
     font-size: clamp(2rem, 10vw, 3.2rem);
     line-height: 1.4;
     color: var(--rose);
-    opacity: 0;
+    opacity: 1;               /* typewriter handles reveal, not fade */
     transform: translateY(30px);
-    transition: all 1s ease, color 0.5s, filter 0.5s;
-    max-width: 320px;
+    transition: transform 1s ease, color 0.5s, filter 0.5s;
+    max-width: 340px;
+    min-height: 2em;          /* reserve space before typing starts */
   }
-  .memory-quote.visible { opacity:1; transform:translateY(0); }
+  .memory-quote.visible { transform:translateY(0); }
   [data-theme="light"] .memory-quote { filter: drop-shadow(0 2px 10px rgba(192,68,106,0.15)); }
   [data-theme="dark"]  .memory-quote { color: var(--rose-pale); filter: drop-shadow(0 0 14px rgba(192,68,106,0.5)); }
 
@@ -707,6 +759,9 @@
 </head>
 <body>
 
+<!-- Scroll progress bar -->
+<div id="progress-bar"></div>
+
 <!-- Theme ripple overlay -->
 <div id="theme-ripple"></div>
 
@@ -797,7 +852,7 @@
 
 <!-- ═══ MEMORY ═══ -->
 <section class="page" id="memory">
-  <div class="memory-quote" data-reveal>"Growing up with you was my favourite story"</div>
+  <div class="memory-quote" data-reveal data-typewriter='"Growing up with you was my favourite story"'></div>
   <div class="memory-divider" data-reveal>
     <div class="md-line"></div><div class="md-icon">🌸</div><div class="md-line"></div>
   </div>
@@ -1069,12 +1124,158 @@ musicBtn.addEventListener('click', ()=>{
 });
 
 /* ══════════════════════════
-   SCROLL REVEAL
+   SCROLL REVEAL + TYPEWRITER
 ══════════════════════════ */
+const TYPEWRITER_TEXT = '"Growing up with you was my favourite story"';
+let twDone = false;
+
+function runTypewriter(el){
+  if(twDone) return;
+  twDone = true;
+  el.innerHTML = '';
+
+  // Insert cursor
+  const cursor = document.createElement('span');
+  cursor.className = 'tw-cursor';
+  el.appendChild(cursor);
+
+  let i = 0;
+  const speed = 45; // ms per character
+  function typeNext(){
+    if(i < TYPEWRITER_TEXT.length){
+      // Insert char before cursor
+      const char = document.createTextNode(TYPEWRITER_TEXT[i]);
+      el.insertBefore(char, cursor);
+      i++;
+      setTimeout(typeNext, speed + (Math.random() * 20 - 10));
+    } else {
+      // Done typing — blink cursor 3 more times then fade it
+      setTimeout(()=>{
+        cursor.style.transition = 'opacity 0.5s';
+        cursor.style.opacity = '0';
+        setTimeout(()=> cursor.remove(), 600);
+      }, 1400);
+    }
+  }
+  setTimeout(typeNext, 300); // small delay before starting
+}
+
 const observer = new IntersectionObserver(entries=>{
-  entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('visible'); });
-},{threshold:0.15});
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      e.target.classList.add('visible');
+      if(e.target.dataset.typewriter !== undefined){
+        runTypewriter(e.target);
+      }
+    }
+  });
+},{threshold:0.2});
 document.querySelectorAll('[data-reveal]').forEach(el=>observer.observe(el));
+
+/* ══════════════════════════
+   SCROLL PROGRESS BAR
+══════════════════════════ */
+const progressBar = document.getElementById('progress-bar');
+function updateProgress(){
+  const scrolled = window.scrollY;
+  const total    = document.documentElement.scrollHeight - window.innerHeight;
+  const pct      = total > 0 ? (scrolled / total) * 100 : 0;
+  progressBar.style.width = pct + '%';
+}
+window.addEventListener('scroll', updateProgress, { passive: true });
+updateProgress();
+
+/* ══════════════════════════
+   PARALLAX ON SCROLL
+══════════════════════════ */
+const orb1El = document.querySelector('.orb1');
+const orb2El = document.querySelector('.orb2');
+const orb3El = document.querySelector('.orb3');
+const orb4El = document.querySelector('.orb4');
+const heroSection  = document.getElementById('hero');
+const heroChildren = heroSection.querySelectorAll(
+  '.for-label, .name-wrap, .hero-tagline, .hero-rose, .hero-date'
+);
+
+let lastScrollY = 0;
+let parallaxRAF = null;
+
+function applyParallax(){
+  const sy = window.scrollY;
+
+  // Orbs — each layer at a slightly different depth
+  // They're position:fixed so we add a translateY offset to create movement
+  orb1El.style.transform = `translate(0, ${sy * 0.08}px) scale(1)`;
+  orb2El.style.transform = `translate(0, ${sy * -0.06}px) scale(1)`;
+  orb3El.style.transform = `translate(0, ${sy * 0.12}px) scale(1)`;
+  orb4El.style.transform = `translate(0, ${sy * -0.04}px) scale(1)`;
+
+  // Hero content — moves up slightly slower than scroll = feels like it's further away
+  const heroOffset = sy * 0.28;
+  heroChildren.forEach(el => {
+    el.style.transform = `translateY(${heroOffset}px)`;
+  });
+
+  parallaxRAF = null;
+}
+
+window.addEventListener('scroll', ()=>{
+  if(!parallaxRAF) parallaxRAF = requestAnimationFrame(applyParallax);
+}, { passive: true });
+
+/* ══════════════════════════
+   PAGE-LOAD PARTICLE BURST
+══════════════════════════ */
+(function spawnBurst(){
+  const cx = window.innerWidth  / 2;
+  const cy = window.innerHeight / 2;
+  const BURST_SYMBOLS = ['🌸','🌹','✦','✧','❋','✿','❀','💗','⋆','✺'];
+  const COUNT = 55;
+
+  for(let i = 0; i < COUNT; i++){
+    const el   = document.createElement('span');
+    el.className = 'burst-particle';
+    el.textContent = BURST_SYMBOLS[Math.floor(Math.random() * BURST_SYMBOLS.length)];
+
+    const angle   = (Math.PI * 2 / COUNT) * i + (Math.random() - 0.5) * 0.4;
+    const dist    = 80  + Math.random() * 220;
+    const size    = 10  + Math.random() * 22;
+    const delay   = Math.random() * 180;
+    const dur     = 900 + Math.random() * 700;
+    const tx      = Math.cos(angle) * dist;
+    const ty      = Math.sin(angle) * dist;
+
+    el.style.cssText = `
+      left: ${cx}px; top: ${cy}px;
+      font-size: ${size}px;
+      opacity: 0;
+      transform: translate(-50%, -50%) translate(0px, 0px) scale(0.2) rotate(0deg);
+    `;
+    document.body.appendChild(el);
+
+    // Animate with JS for fine control
+    setTimeout(()=>{
+      const start = performance.now();
+      function frame(now){
+        const t = Math.min((now - start) / dur, 1);
+        // ease out cubic
+        const e = 1 - Math.pow(1 - t, 3);
+        const opacity = t < 0.15
+          ? t / 0.15                       // fade in
+          : t > 0.6
+            ? 1 - ((t - 0.6) / 0.4)       // fade out
+            : 1;
+        const scale = 0.2 + e * 0.8;
+        const rot   = e * (Math.random() > 0.5 ? 360 : -360);
+        el.style.opacity   = opacity;
+        el.style.transform = `translate(-50%,-50%) translate(${e*tx}px,${e*ty}px) scale(${scale}) rotate(${rot}deg)`;
+        if(t < 1) requestAnimationFrame(frame);
+        else el.remove();
+      }
+      requestAnimationFrame(frame);
+    }, delay);
+  }
+})();
 
 /* ══════════════════════════
    SPARKLE + RIPPLE ON TAP
