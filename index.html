@@ -1,9 +1,17 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light" id="html-root">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Happy Birthday Deluluuuuu 🌹</title>
+<!-- Set theme before paint to avoid flash -->
+<script>
+  (function(){
+    const hour = new Date().getHours();
+    // Dark between midnight (0) and 7AM (exclusive)
+    document.getElementById('html-root').dataset.theme = (hour >= 0 && hour < 7) ? 'dark' : 'light';
+  })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Pinyon+Script&display=swap" rel="stylesheet" />
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -749,7 +757,7 @@ window.addEventListener('resize', resize);
 const LIGHT_COLORS = ['#e07898','#f4c2d5','#c0446a','#d4a450','#fce8f0','#e8a0b8','#f9d0de'];
 const DARK_COLORS  = ['#b03060','#e07898','#f4c2d5','#c9964e','#fff0f5','#d4708a','#e8c07a'];
 
-let petalColors = LIGHT_COLORS;
+let petalColors = document.documentElement.dataset.theme === 'dark' ? DARK_COLORS : LIGHT_COLORS;
 function updatePetalColors(){
   petalColors = document.documentElement.dataset.theme === 'dark' ? DARK_COLORS : LIGHT_COLORS;
   petals.forEach(p => p.color = petalColors[Math.floor(Math.random()*petalColors.length)]);
